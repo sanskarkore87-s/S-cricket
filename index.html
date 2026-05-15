@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>S Cricket Hand Game</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="home-screen screen" id="homeScreen">
+    <h1>🏏 S Cricket Hand Game</h1>
+    <p>Classic hand cricket with a modern look.</p>
+    <button id="playBtn">Vs Computer</button>
+    <button id="onlineBtn" style="margin-top: 10px; background: linear-gradient(135deg, #2196F3, #1976D2);">Play Online</button>
+  </div>
+
+  <div class="screen hidden" id="multiplayerScreen">
+    <h2>🌐 Online Multiplayer</h2>
+    <div id="roomControls">
+      <button id="createRoomBtn">Create Room</button>
+      <p style="margin: 15px 0;">— OR —</p>
+      <input type="text" id="roomInput" placeholder="Enter Room ID" style="padding: 12px; border-radius: 12px; border: none; width: 100%; margin-bottom: 15px; color: #000; text-align: center;">
+      <button id="joinRoomBtn" style="background: linear-gradient(135deg, #FF9800, #F57C00);">Join Room</button>
+    </div>
+    <div id="waitingArea" class="hidden">
+      <p>Waiting for Player 2...</p>
+      <h3 id="displayRoomId" style="font-size: 1.5rem; color: #00c853; margin-top: 10px;"></h3>
+      <p style="font-size: 0.8rem; opacity: 0.7;">Share this ID with your friend</p>
+    </div>
+  </div>
+
+  <div class="toss-screen screen hidden" id="tossScreen">
+    <h2>🪙 Toss Time!</h2>
+    <p>Choose Odd or Even</p>
+    <div class="choice-buttons">
+      <button class="toss-choice" data-choice="odd">Odd</button>
+      <button class="toss-choice" data-choice="even">Even</button>
+    </div>
+    <div id="numberSelection" class="hidden">
+      <p style="margin-top: 20px;">Choose your toss number</p>
+      <div class="choice-buttons">
+        <button class="number-btn" data-number="1">1</button>
+        <button class="number-btn" data-number="2">2</button>
+        <button class="number-btn" data-number="3">3</button>
+      </div>
+      <div class="choice-buttons">
+        <button class="number-btn" data-number="4">4</button>
+        <button class="number-btn" data-number="5">5</button>
+        <button class="number-btn" data-number="6">6</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="screen hidden" id="batBowlScreen">
+    <h2>🏏 Choose Your Role</h2>
+    <p>Congratulations! You won the toss.</p>
+    <div class="choice-buttons">
+      <button id="batBtn">🏏 Bat</button>
+      <button id="bowlBtn">🎯 Bowl</button>
+    </div>
+  </div>
+
+  <div class="screen hidden" id="gameScreen">
+    <h2 id="gameRole">🏏 You are Batting</h2>
+    <p id="scoreText">Score: 0</p>
+    <p id="targetText">Target: --</p>
+    <p id="computerText">Computer chose: ?</p>
+    <p id="commentaryText">Choose a number to start.</p>
+    <div id="gameButtons">
+      <div class="choice-buttons">
+        <button class="game-number" data-number="1">1</button>
+        <button class="game-number" data-number="2">2</button>
+        <button class="game-number" data-number="3">3</button>
+      </div>
+      <div class="choice-buttons">
+        <button class="game-number" data-number="4">4</button>
+        <button class="game-number" data-number="5">5</button>
+        <button class="game-number" data-number="6">6</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="screen hidden" id="resultScreen">
+    <h2 id="resultTitle">🏆 Match Result</h2>
+    <p id="resultSummary">Final Score Summary</p>
+    <div class="choice-buttons">
+      <button id="playAgainBtn">🔁 Play Again</button>
+    </div>
+  </div>
+
+  <audio id="winSound" src="https://www.myinstants.com/media/sounds/victoryff.mp3"></audio>
+  
+  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-database-compat.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
