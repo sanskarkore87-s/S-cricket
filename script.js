@@ -274,19 +274,52 @@ hands.setOptions({
 
 hands.onResults(onHandResults);
 
+// --- UNGLI GINNE KA LOGIC ---
+function countFingers(landmarks) {
+  let count = 0;
+  
+  // Index, Middle, Ring, Pinky (Agar Tip joint PIP joint se upar hai, toh ungli khuli hai)
+  if (landmarks[8].y < landmarks[6].y) count++;
+  if (landmarks[12].y < landmarks[10].y) count++;
+  if (landmarks[16].y < landmarks[14].y) count++;
+  if (landmarks[20].y < landmarks[18].y) count++;
+
+  // Angutha (Thumb) check karna
+  let isThumbOut = Math.abs(landmarks[4].x - landmarks[9].x) > 0.08;
+  if (isThumbOut) count++;
+
+  // Cricket wala "6" (Sirf angutha bahar)
+  if (count === 1 && isThumbOut && landmarks[8].y > landmarks[6].y) {
+     return 6;
+  }
+  
+  if (count === 0) return 0;
+  return count;
+}
+
+// --- NAYA ONHANDRESULTS (Jo number dikhayega) ---
 function onHandResults(results) {
   canvasCtx.save();
   canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
   
-  // Agar haath detect hua, toh uspar green lines draw karo (Testing ke liye)
-  if (results.multiHandLandmarks) {
-    for (const landmarks of results.multiHandLandmarks) {
-      drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 3});
-      drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', lineWidth: 1, radius: 2});
-    }
+  if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+    const landmarks = results.multiHandLandmarks[0];
+    
+    // Haath draw karna
+    drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 3});
+    drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', lineWidth: 1, radius: 2});
+    
+    // Ungli ginna
+    let detectedNumber = countFingers(landmarks);
+    
+    // Camera frame ke andar Neon Green color mein number dikhana
+    canvasCtx.font = "bold 40px Arial";
+    canvasCtx.fillStyle = "#00ff88"; 
+    canvasCtx.fillText("Move: " + detectedNumber, 15, 45);
   }
   canvasCtx.restore();
 }
+
 
 // 2. Camera Start Setup
 const camera = new Camera(videoElement, {
@@ -300,4 +333,28 @@ const camera = new Camera(videoElement, {
 function startAI() {
   cameraContainer.style.display = "block"; // Camera dabba dikhana
   camera.start(); // Vivo ka front camera chalu karna
+}
+// --- UNGLI GINNE KA LOGIC ---
+function countFingers(landmarks) {
+  let count = 0;
+  
+  // Index, Middle, Ring, Pinky (Agar Tip joint PIP joint se upar hai, toh ungli khuli hai)
+  if (landmarks[8].y < landmarks[6].y) count++;
+  if (landmarks[12].y < landmarks[10].y) count++;
+  if (landmarks[16].y < landmarks[14].y) count++;
+  if (landmarks[20].y < landmarks[18].y) count++;
+
+  // Angutha (Thumb) check karna (Thoda distance logic)
+  let isThumbOut = Math.abs(landmarks[4].x - landmarks[9].x) > 0.08;
+  if (isThumbOut) count++;
+
+  // Cricket wala "6" (Sirf angutha bahar ho aur baki ungliyan band hon)
+  if (count === 1 && isThumbOut && landmarks[8].y > landmarks[6].y) {
+     return 6;
+  }
+  
+  // Agar mutthi band hai toh 0
+  if (count === 0) return 0;
+  
+  return count;
 }
