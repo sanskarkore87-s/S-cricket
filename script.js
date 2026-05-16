@@ -297,7 +297,11 @@ function countFingers(landmarks) {
   return count;
 }
 
-// --- NAYA ONHANDRESULTS (Jo number dikhayega) ---
+// --- YAHAN SE PASTE KARNA HAI (Line 300 se) ---
+let lastDetectedNumber = -1;
+let detectionStartTime = 0;
+const HOLD_TIME = 1500; // 1.5 Second tak haath rokna padega
+
 function onHandResults(results) {
   canvasCtx.save();
   canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
@@ -305,20 +309,70 @@ function onHandResults(results) {
   if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
     const landmarks = results.multiHandLandmarks[0];
     
-    // Haath draw karna
     drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 3});
     drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', lineWidth: 1, radius: 2});
     
-    // Ungli ginna
     let detectedNumber = countFingers(landmarks);
     
-    // Camera frame ke andar Neon Green color mein number dikhana
+    // Timer System for Automatic Move
+    if (detectedNumber > 0 && detectedNumber <= 6) {
+      if (detectedNumber === lastDetectedNumber) {
+        let elapsedTime = Date.now() - detectionStartTime;
+        let progress = Math.min(100, (elapsedTime / HOLD_TIME) * 100);
+        
+        canvasCtx.font = "bold 24px Arial";
+        canvasCtx.fillStyle = "#ffaa00";
+        canvasCtx.fillText("Locking: " + Math.round(progress) + "%", 15, 80);
+        
+        if (elapsedTime >= HOLD_TIME) {
+          // JADOO: Automatic shot trigger!
+          triggerCameraMove(detectedNumber);
+          lastDetectedNumber = -1; // Reset
+        }
+      } else {
+        lastDetectedNumber = detectedNumber;
+        detectionStartTime = Date.now();
+      }
+    } else {
+      lastDetectedNumber = -1;
+    }
+    
     canvasCtx.font = "bold 40px Arial";
     canvasCtx.fillStyle = "#00ff88"; 
     canvasCtx.fillText("Move: " + detectedNumber, 15, 45);
   }
   canvasCtx.restore();
 }
+
+// Ye function camera ke number ko sidha tere cricket logic se jodega
+function triggerCameraMove(cameraNumber) {
+  // Check if game is over
+  if (typeof isGameOver !== 'undefined' && isGameOver) return; 
+  
+  const computerNumber = Math.floor(Math.random() * 6) + 1;
+  computerText.textContent = `Computer chose: ${computerNumber}`;
+
+  if (cameraNumber === computerNumber) {
+    commentaryText.textContent = "🏏 OUT! (Camera Shot)";
+    setTimeout(handleOut, 300);
+    return;
+  }
+
+  if (playerRole === "bat") {
+    score += cameraNumber;
+    commentaryText.textContent = `🏏 Camera Shot: You scored ${cameraNumber} runs!`;
+  } else {
+    score += computerNumber;
+    commentaryText.textContent = `🤖 Computer scored ${computerNumber} runs!`;
+  }
+  scoreText.textContent = `Score: ${score}`;
+
+  if (target && score >= target) {
+    if (playerRole === "bat") endMatch("🎉 You Won the Match!");
+    else endMatch("🤖 Computer Won the Match!");
+  }
+}
+// --- YAHAN TAK PASTE KARNA HAI ---
 
 
 // 2. Camera Start Setup
