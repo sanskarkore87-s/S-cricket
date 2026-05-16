@@ -47,16 +47,24 @@ const resultSummary = document.getElementById("resultSummary");
 const playAgainBtn = document.getElementById("playAgainBtn");
 const winSound = document.getElementById("winSound");
 
-// 3. Game Variables
-let playerChoice = "";
-let playerRole = "";
+// ==========================================
+// 🏏 3. GAME VARIABLES (Line 50 se shuru)
+// ==========================================
+let playerChoice = ""; 
+let playerRole = ""; 
 let score = 0;
 let innings = 1;
-let firstInningsScore = 0;
 let target = null;
-let isMultiplayer = false;
+let isGameOver = false;
 
-// 4. Sound Function
+// 🌐 MULTIPLAYER VARIABLES
+let isMultiplayer = false;
+let roomId = null;
+let playerId = 1;
+
+// ==========================================
+// 🎮 4. SOUND & MODE FUNCTIONS
+// ==========================================
 function playSound(sound) {
   if (sound) {
     sound.currentTime = 0;
@@ -64,351 +72,250 @@ function playSound(sound) {
   }
 }
 
-// 5. Buttons Logic (Gichh Midd Fix)
-// Offline Khelna hai (Vs Computer)
+// Vs Computer Mode
 playBtn.addEventListener("click", () => {
   homeScreen.classList.add("hidden");
   tossScreen.classList.remove("hidden");
   isMultiplayer = false;
 });
 
-// Online Khelna hai (Play Online)
+// Multiplayer Mode
 onlineBtn.addEventListener("click", () => {
   homeScreen.classList.add("hidden");
   multiplayerScreen.classList.remove("hidden");
   isMultiplayer = true;
 });
 
-// 6. Baaki ka Purana Game Logic (Vs Computer ke liye)
+// ==========================================
+// 🌐 5. MULTIPLAYER ROOM SETUP
+// ==========================================
+createRoomBtn.addEventListener("click", () => {
+  roomId = Math.floor(1000 + Math.random() * 9000).toString();
+  playerId = 1;
+  database.ref('rooms/' + roomId).set({
+    player1: true,
+    player2: false,
+    gameState: "waiting",
+    tossWinner: 0,
+    tossDecision: "",
+    p1Move: 0,
+    p2Move: 0
+  });
+  roomControls.classList.add("hidden");
+  waitingArea.classList.remove("hidden");
+  displayRoomId.textContent = "Room ID: " + roomId;
+
+  database.ref('rooms/' + roomId + '/player2').on('value', (snapshot) => {
+    if (snapshot.val() === true) {
+      alert("🎉 Dost aa gaya! Get ready for Toss.");
+      multiplayerScreen.classList.add("hidden");
+      tossScreen.classList.remove("hidden");
+      if (playerId === 1) database.ref('rooms/' + roomId).update({ gameState: "toss" });
+    }
+  });
+});
+
+joinRoomBtn.addEventListener("click", () => {
+  const enteredId = roomInput.value.trim();
+  if (enteredId === "") return alert("Room ID daal bhai!");
+  database.ref('rooms/' + enteredId).once('value', (snapshot) => {
+    if (snapshot.exists() && snapshot.val().player2 === false) {
+      roomId = enteredId;
+      playerId = 2;
+      database.ref('rooms/' + roomId).update({ player2: true });
+      alert("🎉 Room Joined!");
+      multiplayerScreen.classList.add("hidden");
+      tossScreen.classList.remove("hidden");
+    } else {
+      alert("Room nahi mila ya full hai!");
+    }
+  });
+});
+
+// ==========================================
+// 🪙 6. TOSS & START GAME
+// ==========================================
 tossChoices.forEach(button => {
   button.addEventListener("click", () => {
     playerChoice = button.dataset.choice;
-    const firstChoiceButtons = document.querySelector(".choice-buttons");
-    if (firstChoiceButtons) firstChoiceButtons.classList.add("hidden");
-    const tossParagraph = document.querySelector(".toss-screen p");
-    if (tossParagraph) tossParagraph.textContent = `You selected ${playerChoice.toUpperCase()}. Now choose your number.`;
+    tossChoiceSection.classList.add("hidden");
     numberSelection.classList.remove("hidden");
   });
 });
 
 numberButtons.forEach(button => {
   button.addEventListener("click", () => {
-    const playerNumber = parseInt(button.dataset.number);
-    const computerNumber = Math.floor(Math.random() * 6) + 1;
-    const total = playerNumber + computerNumber;
-    const result = total % 2 === 0 ? "even" : "odd";
-    let message = `You chose: ${playerNumber}\nComputer chose: ${computerNumber}\nTotal = ${total} (${result.toUpperCase()})\n\n`;
-
+    if (isMultiplayer && playerId === 2) return alert("P1 ko toss karne de!");
+    const pNum = parseInt(button.dataset.number);
+    const oNum = Math.floor(Math.random() * 6) + 1;
+    const result = (pNum + oNum) % 2 === 0 ? "even" : "odd";
     if (result === playerChoice) {
-      alert(message + "🎉 You won the toss!");
+      alert("🎉 You won the toss!");
       tossScreen.classList.add("hidden");
       batBowlScreen.classList.remove("hidden");
     } else {
-      const computerDecision = Math.random() < 0.5 ? "BAT" : "BOWL";
-      alert(message + `🤖 Computer won the toss!\nComputer chooses to ${computerDecision}.`);
-      playerRole = computerDecision === "BAT" ? "bowl" : "bat";
+      const decision = Math.random() < 0.5 ? "bat" : "bowl";
+      alert(`🤖 Opponent won and chose to ${decision}.`);
+      playerRole = decision === "bat" ? "bowl" : "bat";
+      if (isMultiplayer) database.ref('rooms/' + roomId).update({ tossWinner: 2, tossDecision: decision, gameState: "playing" });
       startGame();
     }
   });
 });
 
-batBtn.addEventListener("click", () => { playerRole = "bat"; startGame(); });
-bowlBtn.addEventListener("click", () => { playerRole = "bowl"; startGame(); });
+batBtn.addEventListener("click", () => { 
+  playerRole = "bat"; 
+  if (isMultiplayer) database.ref('rooms/' + roomId).update({ tossWinner: 1, tossDecision: "bat", gameState: "playing" });
+  startGame(); 
+});
+bowlBtn.addEventListener("click", () => { 
+  playerRole = "bowl"; 
+  if (isMultiplayer) database.ref('rooms/' + roomId).update({ tossWinner: 1, tossDecision: "bowl", gameState: "playing" });
+  startGame(); 
+});
+
+// Sync Toss for P2
+setInterval(() => {
+  if (isMultiplayer && roomId && playerId === 2 && !tossScreen.classList.contains("hidden")) {
+    database.ref('rooms/' + roomId).once('value', (snapshot) => {
+      const data = snapshot.val();
+      if (data && data.gameState === "playing") {
+        playerRole = data.tossWinner === 1 ? (data.tossDecision === "bat" ? "bowl" : "bat") : (data.tossDecision === "bat" ? "bat" : "bowl");
+        alert(`Toss Done! You are ${playerRole}ing.`);
+        startGame();
+      }
+    });
+  }
+}, 1500);
 
 function startGame() {
   score = 0;
+  isGameOver = false;
   batBowlScreen.classList.add("hidden");
   tossScreen.classList.add("hidden");
   gameScreen.classList.remove("hidden");
   updateUI();
-  startAI();
+  startAI(); 
+
+  if (isMultiplayer && playerId === 1) {
+    database.ref('rooms/' + roomId).on('value', (snapshot) => {
+      const data = snapshot.val();
+      if (data && data.p1Move > 0 && data.p2Move > 0 && !isGameOver) {
+        processMultiplayerTurn(data.p1Move, data.p2Move);
+      }
+    });
+  }
 }
-function updateUI() {
-  gameRole.textContent = playerRole === "bat" ? "🏏 You are Batting" : "🎯 You are Bowling";
-  scoreText.textContent = `Score: ${score}`;
-  targetText.textContent = target ? `Target: ${target}` : "Target: --";
-  computerText.textContent = "Computer chose: ?";
-  commentaryText.textContent = innings === 1 ? "First Innings - Choose a number." : "Second Innings - Chase the target!";
+
+// ==========================================
+// 🏏 7. GAME PLAY & AI SYNC
+// ==========================================
+function processMultiplayerTurn(m1, m2) {
+  let p1IsBatting = (playerId === 1 && playerRole === "bat") || (playerId === 2 && playerRole === "bowl");
+  let batMove = p1IsBatting ? m1 : m2;
+  let bowlMove = p1IsBatting ? m2 : m1;
+
+  if (batMove === bowlMove) {
+    commentaryText.textContent = `🏏 OUT! Both played ${batMove}`;
+    setTimeout(handleOut, 1000);
+  } else {
+    score += batMove;
+    commentaryText.textContent = `Shot: ${batMove} runs!`;
+    if (target && score >= target) endMatch("🎉 Target Chased!");
+    updateUI();
+  }
+  setTimeout(() => database.ref('rooms/' + roomId).update({ p1Move: 0, p2Move: 0 }), 500);
 }
-
-gameNumberButtons.forEach(button => {
-  button.addEventListener("click", () => {
-    const playerNumber = parseInt(button.dataset.number);
-    const computerNumber = Math.floor(Math.random() * 6) + 1;
-    computerText.textContent = `Computer chose: ${computerNumber}`;
-
-    if (playerNumber === computerNumber) {
-      commentaryText.textContent = "🏏 OUT!";
-      setTimeout(handleOut, 300);
-      return;
-    }
-
-    if (playerRole === "bat") {
-      score += playerNumber;
-      commentaryText.textContent = `🏏 You scored ${playerNumber} runs!`;
-    } else {
-      score += computerNumber;
-      commentaryText.textContent = `🤖 Computer scored ${computerNumber} runs!`;
-    }
-    scoreText.textContent = `Score: ${score}`;
-
-    if (target && score >= target) {
-      if (playerRole === "bat") endMatch("🎉 You Won the Match!");
-      else endMatch("🤖 Computer Won the Match!");
-    }
-  });
-});
 
 function handleOut() {
   if (innings === 1) {
-    firstInningsScore = score;
-    target = firstInningsScore + 1;
-    innings = 2;
+    target = score + 1;
+    innings = 2; score = 0;
     playerRole = playerRole === "bat" ? "bowl" : "bat";
-    score = 0;
-    alert(`🏏 First Innings Over!\nScore: ${firstInningsScore}\nTarget: ${target}`);
+    commentaryText.textContent = `Target: ${target}. 2nd Innings Start!`;
     updateUI();
   } else {
-    if (score === target - 1) endMatch("🤝 Match Draw!");
-    else if (playerRole === "bat") endMatch("🤖 Computer Won the Match!");
-    else endMatch("🎉 You Won the Match!");
+    if (score >= target) endMatch("🎉 Batting Side Won!");
+    else if (score === target - 1) endMatch("😲 Match Tie!");
+    else endMatch("🔥 Bowling Side Won!");
   }
 }
 
-function endMatch(message) {
-  if (message === "🎉 You Won the Match!") playSound(winSound);
-  gameScreen.classList.add("hidden");
-  resultScreen.classList.remove("hidden");
-  resultTitle.textContent = message;
-  resultSummary.textContent = `1st Innings: ${firstInningsScore} | Target: ${target}`;
+function updateUI() {
+  gameRole.textContent = playerRole === "bat" ? "🏏 Batting" : "🎯 Bowling";
+  scoreText.textContent = `Score: ${score}`;
+  targetText.textContent = target ? `Target: ${target}` : "Target: --";
 }
 
-playAgainBtn.addEventListener("click", () => { location.reload(); });
+function endMatch(msg) {
+  isGameOver = true;
+  commentaryText.textContent = msg;
+}
+
 // ==========================================
-// 🌐 MULTIPLAYER FIREBASE LOGIC 🌐
+// 🤖 8. AI CAMERA & DETECTION
 // ==========================================
-
-// 1. Create Room (Room banane ka logic)
-createRoomBtn.addEventListener("click", () => {
-  // 4-digit ka random Room ID banana
-  roomId = Math.floor(1000 + Math.random() * 9000).toString();
-  playerId = 1; // Tu Player 1 (Creator) hai
-
-  // Firebase me room ka data save karna
-  database.ref('rooms/' + roomId).set({
-    player1: true,
-    player2: false,
-    gameState: "waiting"
-  });
-
-  // UI update karna (Code dikhana)
-  roomControls.classList.add("hidden");
-  waitingArea.classList.remove("hidden");
-  displayRoomId.textContent = "Room ID: " + roomId;
-
-  // Player 2 ka wait karna (Realtime Listen)
-  database.ref('rooms/' + roomId + '/player2').on('value', (snapshot) => {
-    if (snapshot.val() === true) {
-      alert("🎉 Dost aa gaya! Get ready for Toss.");
-      multiplayerScreen.classList.add("hidden");
-      tossScreen.classList.remove("hidden");
-    }
-  });
-});
-
-// 2. Join Room (Dost ke room me ghusne ka logic)
-joinRoomBtn.addEventListener("click", () => {
-  const enteredId = roomInput.value.trim();
-  
-  if (enteredId === "") {
-    alert("Bhai, pehle Room ID toh daal!");
-    return;
-  }
-
-  // Firebase me check karna ki room hai ya nahi
-  database.ref('rooms/' + enteredId).once('value', (snapshot) => {
-    if (snapshot.exists()) {
-      const roomData = snapshot.val();
-      
-      if (roomData.player2 === false) {
-        // Room me join karna
-        roomId = enteredId;
-        playerId = 2; // Tu Player 2 (Joiner) hai
-        
-        database.ref('rooms/' + roomId).update({
-          player2: true,
-          gameState: "connected"
-        });
-
-        alert("🎉 Room Joined! Match shuru karte hain...");
-        multiplayerScreen.classList.add("hidden");
-        tossScreen.classList.remove("hidden");
-        
-      } else {
-        alert("Ye room pehle se full hai bhai!");
-      }
-    } else {
-      alert("Room nahi mila! ID check kar le.");
-    }
-  });
-});
-// ==========================================
-// 🤖 AI CAMERA & HAND DETECTION SETUP 🤖
-// ==========================================
-const cameraContainer = document.getElementById("cameraContainer");
-const videoElement = document.getElementById("webcam");
-const canvasElement = document.getElementById("output_canvas");
-const canvasCtx = canvasElement.getContext("2d");
-
-// 1. AI Model Setup
-const hands = new Hands({
-  locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-});
-
-hands.setOptions({
-  maxNumHands: 1, // Ek time par sirf 1 haath track karega
-  modelComplexity: 1,
-  minDetectionConfidence: 0.5,
-  minTrackingConfidence: 0.5
-});
-
+const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
 hands.onResults(onHandResults);
 
-// --- UNGLI GINNE KA LOGIC ---
-function countFingers(landmarks) {
-  let count = 0;
-  
-  // Index, Middle, Ring, Pinky (Agar Tip joint PIP joint se upar hai, toh ungli khuli hai)
-  if (landmarks[8].y < landmarks[6].y) count++;
-  if (landmarks[12].y < landmarks[10].y) count++;
-  if (landmarks[16].y < landmarks[14].y) count++;
-  if (landmarks[20].y < landmarks[18].y) count++;
+const camera = new Camera(videoElement, {
+  onFrame: async () => { await hands.send({image: videoElement}); },
+  width: 300, height: 225
+});
 
-  // Angutha (Thumb) check karna
-  let isThumbOut = Math.abs(landmarks[4].x - landmarks[9].x) > 0.08;
-  if (isThumbOut) count++;
+function startAI() { cameraContainer.style.display = "block"; camera.start(); }
 
-  // Cricket wala "6" (Sirf angutha bahar)
-  if (count === 1 && isThumbOut && landmarks[8].y > landmarks[6].y) {
-     return 6;
-  }
-  
-  if (count === 0) return 0;
-  return count;
+function countFingers(l) {
+  let c = 0;
+  if (l[8].y < l[6].y) c++; if (l[12].y < l[10].y) c++;
+  if (l[16].y < l[14].y) c++; if (l[20].y < l[18].y) c++;
+  let thumb = Math.abs(l[4].x - l[9].x) > 0.08;
+  if (thumb) c++;
+  if (c === 1 && thumb && l[8].y > l[6].y) return 6;
+  return c;
 }
 
-// --- YAHAN SE PASTE KARNA HAI (Line 300 se) ---
-let lastDetectedNumber = -1;
-let detectionStartTime = 0;
-const HOLD_TIME = 1500; // 1.5 Second tak haath rokna padega
+let lastNum = -1, startT = 0;
+const HOLD = 1500;
 
-function onHandResults(results) {
+function onHandResults(res) {
   canvasCtx.save();
   canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-  
-  if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-    const landmarks = results.multiHandLandmarks[0];
-    
-    drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 3});
-    drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', lineWidth: 1, radius: 2});
-    
-    let detectedNumber = countFingers(landmarks);
-    
-    // Timer System for Automatic Move
-    if (detectedNumber > 0 && detectedNumber <= 6) {
-      if (detectedNumber === lastDetectedNumber) {
-        let elapsedTime = Date.now() - detectionStartTime;
-        let progress = Math.min(100, (elapsedTime / HOLD_TIME) * 100);
-        
-        canvasCtx.font = "bold 24px Arial";
-        canvasCtx.fillStyle = "#ffaa00";
-        canvasCtx.fillText("Locking: " + Math.round(progress) + "%", 15, 80);
-        
-        if (elapsedTime >= HOLD_TIME) {
-          // JADOO: Automatic shot trigger!
-          triggerCameraMove(detectedNumber);
-          lastDetectedNumber = -1; // Reset
-        }
-      } else {
-        lastDetectedNumber = detectedNumber;
-        detectionStartTime = Date.now();
-      }
-    } else {
-      lastDetectedNumber = -1;
-    }
-    
-    canvasCtx.font = "bold 40px Arial";
-    canvasCtx.fillStyle = "#00ff88"; 
-    canvasCtx.fillText("Move: " + detectedNumber, 15, 45);
+  if (res.multiHandLandmarks && res.multiHandLandmarks.length > 0) {
+    const l = res.multiHandLandmarks[0];
+    drawConnectors(canvasCtx, l, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 3});
+    drawLandmarks(canvasCtx, l, {color: '#FF0000', lineWidth: 1, radius: 2});
+    let det = countFingers(l);
+    if (det > 0 && det <= 6 && !isGameOver) {
+      if (det === lastNum) {
+        let elap = Date.now() - startT;
+        let prog = Math.min(100, (elap / HOLD) * 100);
+        canvasCtx.font = "bold 24px Arial"; canvasCtx.fillStyle = "#ffaa00";
+        canvasCtx.fillText("Locking: " + Math.round(prog) + "%", 15, 80);
+        if (elap >= HOLD) { triggerCameraMove(det); lastNum = -1; }
+      } else { lastNum = det; startT = Date.now(); }
+    } else lastNum = -1;
+    canvasCtx.font = "bold 40px Arial"; canvasCtx.fillStyle = "#00ff88"; 
+    canvasCtx.fillText("Move: " + det, 15, 45);
   }
   canvasCtx.restore();
 }
 
-// Ye function camera ke number ko sidha tere cricket logic se jodega
-function triggerCameraMove(cameraNumber) {
-  // Check if game is over
-  if (typeof isGameOver !== 'undefined' && isGameOver) return; 
-  
-  const computerNumber = Math.floor(Math.random() * 6) + 1;
-  computerText.textContent = `Computer chose: ${computerNumber}`;
-
-  if (cameraNumber === computerNumber) {
-    commentaryText.textContent = "🏏 OUT! (Camera Shot)";
-    setTimeout(handleOut, 300);
-    return;
-  }
-
-  if (playerRole === "bat") {
-    score += cameraNumber;
-    commentaryText.textContent = `🏏 Camera Shot: You scored ${cameraNumber} runs!`;
+function triggerCameraMove(num) {
+  if (isGameOver) return;
+  if (!isMultiplayer) {
+    const cpu = Math.floor(Math.random() * 6) + 1;
+    computerText.textContent = `Computer: ${cpu}`;
+    if (num === cpu) { commentaryText.textContent = "🏏 OUT!"; setTimeout(handleOut, 300); }
+    else {
+      score += playerRole === "bat" ? num : cpu;
+      updateUI();
+      if (target && score >= target) endMatch(playerRole === "bat" ? "🎉 Won!" : "🤖 CPU Won!");
+    }
   } else {
-    score += computerNumber;
-    commentaryText.textContent = `🤖 Computer scored ${computerNumber} runs!`;
+    commentaryText.textContent = `Locked ${num}. Waiting...`;
+    if (playerId === 1) database.ref('rooms/' + roomId).update({ p1Move: num });
+    else database.ref('rooms/' + roomId).update({ p2Move: num });
   }
-  scoreText.textContent = `Score: ${score}`;
-
-  if (target && score >= target) {
-    if (playerRole === "bat") endMatch("🎉 You Won the Match!");
-    else endMatch("🤖 Computer Won the Match!");
-  }
-}
-// --- YAHAN TAK PASTE KARNA HAI ---
-
-
-// 2. Camera Start Setup
-const camera = new Camera(videoElement, {
-  onFrame: async () => {
-    await hands.send({image: videoElement});
-  },
-  width: 300,
-  height: 225
-});
-
-function startAI() {
-  cameraContainer.style.display = "block"; // Camera dabba dikhana
-  camera.start(); // Vivo ka front camera chalu karna
-}
-// --- UNGLI GINNE KA LOGIC ---
-function countFingers(landmarks) {
-  let count = 0;
-  
-  // Index, Middle, Ring, Pinky (Agar Tip joint PIP joint se upar hai, toh ungli khuli hai)
-  if (landmarks[8].y < landmarks[6].y) count++;
-  if (landmarks[12].y < landmarks[10].y) count++;
-  if (landmarks[16].y < landmarks[14].y) count++;
-  if (landmarks[20].y < landmarks[18].y) count++;
-
-  // Angutha (Thumb) check karna (Thoda distance logic)
-  let isThumbOut = Math.abs(landmarks[4].x - landmarks[9].x) > 0.08;
-  if (isThumbOut) count++;
-
-  // Cricket wala "6" (Sirf angutha bahar ho aur baki ungliyan band hon)
-  if (count === 1 && isThumbOut && landmarks[8].y > landmarks[6].y) {
-     return 6;
-  }
-  
-  // Agar mutthi band hai toh 0
-  if (count === 0) return 0;
-  
-  return count;
 }
