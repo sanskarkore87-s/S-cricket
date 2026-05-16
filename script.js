@@ -47,8 +47,8 @@ const resultSummary = document.getElementById("resultSummary");
 const playAgainBtn = document.getElementById("playAgainBtn");
 const winSound = document.getElementById("winSound");
 
-// ==========================================
-// 🏏 3. GAME VARIABLES (Line 50 se shuru)
+ // ==========================================
+// 🏏 3. GAME & MULTIPLAYER VARIABLES (Line 50 se)
 // ==========================================
 let playerChoice = ""; 
 let playerRole = ""; 
@@ -57,13 +57,13 @@ let innings = 1;
 let target = null;
 let isGameOver = false;
 
-// 🌐 MULTIPLAYER VARIABLES
+// 🌐 MULTIPLAYER CONFIG
 let isMultiplayer = false;
 let roomId = null;
 let playerId = 1;
 
 // ==========================================
-// 🎮 4. SOUND & MODE FUNCTIONS
+// 🎮 4. SOUND & MODE SELECTION
 // ==========================================
 function playSound(sound) {
   if (sound) {
@@ -72,14 +72,14 @@ function playSound(sound) {
   }
 }
 
-// Vs Computer Mode
+// Offline Mode (Vs Computer)
 playBtn.addEventListener("click", () => {
   homeScreen.classList.add("hidden");
   tossScreen.classList.remove("hidden");
   isMultiplayer = false;
 });
 
-// Multiplayer Mode
+// Online Mode (Multiplayer)
 onlineBtn.addEventListener("click", () => {
   homeScreen.classList.add("hidden");
   multiplayerScreen.classList.remove("hidden");
@@ -87,11 +87,12 @@ onlineBtn.addEventListener("click", () => {
 });
 
 // ==========================================
-// 🌐 5. MULTIPLAYER ROOM SETUP
+// 🌐 5. FIREBASE ROOM MANAGEMENT
 // ==========================================
 createRoomBtn.addEventListener("click", () => {
   roomId = Math.floor(1000 + Math.random() * 9000).toString();
-  playerId = 1;
+  playerId = 1; // Host
+  
   database.ref('rooms/' + roomId).set({
     player1: true,
     player2: false,
@@ -101,6 +102,7 @@ createRoomBtn.addEventListener("click", () => {
     p1Move: 0,
     p2Move: 0
   });
+
   roomControls.classList.add("hidden");
   waitingArea.classList.remove("hidden");
   displayRoomId.textContent = "Room ID: " + roomId;
@@ -117,23 +119,24 @@ createRoomBtn.addEventListener("click", () => {
 
 joinRoomBtn.addEventListener("click", () => {
   const enteredId = roomInput.value.trim();
-  if (enteredId === "") return alert("Room ID daal bhai!");
+  if (enteredId === "") return alert("Bhai, Room ID toh daal!");
+
   database.ref('rooms/' + enteredId).once('value', (snapshot) => {
     if (snapshot.exists() && snapshot.val().player2 === false) {
       roomId = enteredId;
-      playerId = 2;
+      playerId = 2; // Joiner
       database.ref('rooms/' + roomId).update({ player2: true });
-      alert("🎉 Room Joined!");
+      alert("🎉 Room Joined! Match shuru...");
       multiplayerScreen.classList.add("hidden");
       tossScreen.classList.remove("hidden");
     } else {
-      alert("Room nahi mila ya full hai!");
+      alert("Room full hai ya ID galat hai!");
     }
   });
 });
 
 // ==========================================
-// 🪙 6. TOSS & START GAME
+// 🪙 6. SMART TOSS LOGIC
 // ==========================================
 tossChoices.forEach(button => {
   button.addEventListener("click", () => {
@@ -143,19 +146,21 @@ tossChoices.forEach(button => {
   });
 });
 
-numberButtons.forEach(button => {
+gameNumberButtons.forEach(button => {
   button.addEventListener("click", () => {
-    if (isMultiplayer && playerId === 2) return alert("P1 ko toss karne de!");
+    if (isMultiplayer && playerId === 2) return alert("P1 ko toss karne de! Tu wait kar.");
+
     const pNum = parseInt(button.dataset.number);
     const oNum = Math.floor(Math.random() * 6) + 1;
     const result = (pNum + oNum) % 2 === 0 ? "even" : "odd";
+
     if (result === playerChoice) {
-      alert("🎉 You won the toss!");
+      alert("🎉 You won the toss! Choose Bat or Bowl.");
       tossScreen.classList.add("hidden");
       batBowlScreen.classList.remove("hidden");
     } else {
       const decision = Math.random() < 0.5 ? "bat" : "bowl";
-      alert(`🤖 Opponent won and chose to ${decision}.`);
+      alert(`🤖 Opponent won the toss and chose to ${decision}.`);
       playerRole = decision === "bat" ? "bowl" : "bat";
       if (isMultiplayer) database.ref('rooms/' + roomId).update({ tossWinner: 2, tossDecision: decision, gameState: "playing" });
       startGame();
@@ -168,13 +173,14 @@ batBtn.addEventListener("click", () => {
   if (isMultiplayer) database.ref('rooms/' + roomId).update({ tossWinner: 1, tossDecision: "bat", gameState: "playing" });
   startGame(); 
 });
+
 bowlBtn.addEventListener("click", () => { 
   playerRole = "bowl"; 
   if (isMultiplayer) database.ref('rooms/' + roomId).update({ tossWinner: 1, tossDecision: "bowl", gameState: "playing" });
   startGame(); 
 });
 
-// Sync Toss for P2
+// Player 2 Realtime Toss Sync
 setInterval(() => {
   if (isMultiplayer && roomId && playerId === 2 && !tossScreen.classList.contains("hidden")) {
     database.ref('rooms/' + roomId).once('value', (snapshot) => {
@@ -188,16 +194,23 @@ setInterval(() => {
   }
 }, 1500);
 
+// ==========================================
+// 🏏 7. MAIN GAME FLOW & ENGINE
+// ==========================================
 function startGame() {
   score = 0;
   isGameOver = false;
-  batBowlScreen.classList.add("hidden");
+  
   tossScreen.classList.add("hidden");
+  batBowlScreen.classList.add("hidden");
+  multiplayerScreen.classList.add("hidden");
   gameScreen.classList.remove("hidden");
+  
   updateUI();
   startAI(); 
 
-  if (isMultiplayer && playerId === 1) {
+  if (isMultiplayer && roomId) {
+    database.ref('rooms/' + roomId).off('value'); 
     database.ref('rooms/' + roomId).on('value', (snapshot) => {
       const data = snapshot.val();
       if (data && data.p1Move > 0 && data.p2Move > 0 && !isGameOver) {
@@ -207,37 +220,48 @@ function startGame() {
   }
 }
 
-// ==========================================
-// 🏏 7. GAME PLAY & AI SYNC
-// ==========================================
 function processMultiplayerTurn(m1, m2) {
-  let p1IsBatting = (playerId === 1 && playerRole === "bat") || (playerId === 2 && playerRole === "bowl");
-  let batMove = p1IsBatting ? m1 : m2;
-  let bowlMove = p1IsBatting ? m2 : m1;
+  let localIsBatting = (playerRole === "bat");
+  let myMove = (playerId === 1) ? m1 : m2;
+  let oppMove = (playerId === 1) ? m2 : m1;
+  
+  let batMove = localIsBatting ? myMove : oppMove;
+  let bowlMove = localIsBatting ? oppMove : myMove;
+
+  computerText.textContent = `Opponent chose: ${oppMove}`;
 
   if (batMove === bowlMove) {
     commentaryText.textContent = `🏏 OUT! Both played ${batMove}`;
     setTimeout(handleOut, 1000);
   } else {
     score += batMove;
-    commentaryText.textContent = `Shot: ${batMove} runs!`;
-    if (target && score >= target) endMatch("🎉 Target Chased!");
+    commentaryText.textContent = localIsBatting ? `🏏 You scored ${batMove} runs!` : `🤖 Opponent scored ${batMove} runs!`;
     updateUI();
+    if (target && score >= target) {
+      endMatch(localIsBatting ? "🎉 You Won the Match!" : "🤖 Opponent Won the Match!");
+    }
   }
-  setTimeout(() => database.ref('rooms/' + roomId).update({ p1Move: 0, p2Move: 0 }), 500);
+  if (playerId === 1) {
+    setTimeout(() => database.ref('rooms/' + roomId).update({ p1Move: 0, p2Move: 0 }), 1000);
+  }
 }
 
 function handleOut() {
   if (innings === 1) {
     target = score + 1;
-    innings = 2; score = 0;
+    innings = 2; 
+    score = 0;
     playerRole = playerRole === "bat" ? "bowl" : "bat";
-    commentaryText.textContent = `Target: ${target}. 2nd Innings Start!`;
+    commentaryText.textContent = `Target is ${target}. Second Innings Start!`;
     updateUI();
   } else {
-    if (score >= target) endMatch("🎉 Batting Side Won!");
-    else if (score === target - 1) endMatch("😲 Match Tie!");
-    else endMatch("🔥 Bowling Side Won!");
+    if (score >= target) {
+      endMatch(playerRole === "bat" ? "🎉 You Won the Match!" : "🤖 Opponent Won the Match!");
+    } else if (score === target - 1) {
+      endMatch("😲 Match Tie!");
+    } else {
+      endMatch(playerRole === "bat" ? "🤖 Opponent Won the Match!" : "🎉 You Won the Match!");
+    }
   }
 }
 
@@ -250,10 +274,13 @@ function updateUI() {
 function endMatch(msg) {
   isGameOver = true;
   commentaryText.textContent = msg;
+  if (msg.includes("You Won") || msg.includes("🎉")) {
+    playSound(winSound);
+  }
 }
 
 // ==========================================
-// 🤖 8. AI CAMERA & DETECTION
+// 🤖 8. AI CAMERA & HAND DETECTION SETUP
 // ==========================================
 const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
 hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
@@ -266,56 +293,79 @@ const camera = new Camera(videoElement, {
 
 function startAI() { cameraContainer.style.display = "block"; camera.start(); }
 
-function countFingers(l) {
-  let c = 0;
-  if (l[8].y < l[6].y) c++; if (l[12].y < l[10].y) c++;
-  if (l[16].y < l[14].y) c++; if (l[20].y < l[18].y) c++;
-  let thumb = Math.abs(l[4].x - l[9].x) > 0.08;
-  if (thumb) c++;
-  if (c === 1 && thumb && l[8].y > l[6].y) return 6;
-  return c;
+function countFingers(landmarks) {
+  let count = 0;
+  if (landmarks[8].y < landmarks[6].y) count++;
+  if (landmarks[12].y < landmarks[10].y) count++;
+  if (landmarks[16].y < landmarks[14].y) count++;
+  if (landmarks[20].y < landmarks[18].y) count++;
+  let isThumbOut = Math.abs(landmarks[4].x - landmarks[9].x) > 0.08;
+  if (isThumbOut) count++;
+  if (count === 1 && isThumbOut && landmarks[8].y > landmarks[6].y) return 6;
+  return count === 0 ? 0 : count;
 }
 
-let lastNum = -1, startT = 0;
-const HOLD = 1500;
+let lastDetectedNumber = -1, detectionStartTime = 0;
+const HOLD_TIME = 1500;
 
-function onHandResults(res) {
+function onHandResults(results) {
   canvasCtx.save();
   canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-  if (res.multiHandLandmarks && res.multiHandLandmarks.length > 0) {
-    const l = res.multiHandLandmarks[0];
-    drawConnectors(canvasCtx, l, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 3});
-    drawLandmarks(canvasCtx, l, {color: '#FF0000', lineWidth: 1, radius: 2});
-    let det = countFingers(l);
-    if (det > 0 && det <= 6 && !isGameOver) {
-      if (det === lastNum) {
-        let elap = Date.now() - startT;
-        let prog = Math.min(100, (elap / HOLD) * 100);
+  
+  if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+    const landmarks = results.multiHandLandmarks[0];
+    drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 3});
+    drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', lineWidth: 1, radius: 2});
+    
+    let detectedNumber = countFingers(landmarks);
+    
+    if (detectedNumber > 0 && detectedNumber <= 6 && !isGameOver) {
+      if (detectedNumber === lastDetectedNumber) {
+        let elapsedTime = Date.now() - detectionStartTime;
+        let progress = Math.min(100, (elapsedTime / HOLD_TIME) * 100);
         canvasCtx.font = "bold 24px Arial"; canvasCtx.fillStyle = "#ffaa00";
-        canvasCtx.fillText("Locking: " + Math.round(prog) + "%", 15, 80);
-        if (elap >= HOLD) { triggerCameraMove(det); lastNum = -1; }
-      } else { lastNum = det; startT = Date.now(); }
-    } else lastNum = -1;
+        canvasCtx.fillText("Locking: " + Math.round(progress) + "%", 15, 80);
+        
+        if (elapsedTime >= HOLD_TIME) {
+          triggerCameraMove(detectedNumber);
+          lastDetectedNumber = -1; 
+        }
+      } else {
+        lastDetectedNumber = detectedNumber;
+        detectionStartTime = Date.now();
+      }
+    } else lastDetectedNumber = -1;
+    
     canvasCtx.font = "bold 40px Arial"; canvasCtx.fillStyle = "#00ff88"; 
-    canvasCtx.fillText("Move: " + det, 15, 45);
+    canvasCtx.fillText("Move: " + detectedNumber, 15, 45);
   }
   canvasCtx.restore();
 }
 
-function triggerCameraMove(num) {
+function triggerCameraMove(cameraNumber) {
   if (isGameOver) return;
+  
   if (!isMultiplayer) {
-    const cpu = Math.floor(Math.random() * 6) + 1;
-    computerText.textContent = `Computer: ${cpu}`;
-    if (num === cpu) { commentaryText.textContent = "🏏 OUT!"; setTimeout(handleOut, 300); }
-    else {
-      score += playerRole === "bat" ? num : cpu;
+    // VS COMPUTER MODE
+    const computerNumber = Math.floor(Math.random() * 6) + 1;
+    computerText.textContent = `Computer chose: ${computerNumber}`;
+    
+    if (cameraNumber === computerNumber) {
+      commentaryText.textContent = "🏏 OUT!";
+      setTimeout(handleOut, 1000);
+    } else {
+      let runs = (playerRole === "bat") ? cameraNumber : computerNumber;
+      score += runs;
+      commentaryText.textContent = playerRole === "bat" ? `🏏 You scored ${cameraNumber} runs!` : `🤖 Computer scored ${computerNumber} runs!`;
       updateUI();
-      if (target && score >= target) endMatch(playerRole === "bat" ? "🎉 Won!" : "🤖 CPU Won!");
+      if (target && score >= target) {
+        endMatch(playerRole === "bat" ? "🎉 You Won the Match!" : "🤖 Computer Won the Match!");
+      }
     }
   } else {
-    commentaryText.textContent = `Locked ${num}. Waiting...`;
-    if (playerId === 1) database.ref('rooms/' + roomId).update({ p1Move: num });
-    else database.ref('rooms/' + roomId).update({ p2Move: num });
+    // MULTIPLAYER MODE
+    commentaryText.textContent = `Locked ${cameraNumber}. Waiting for opponent...`;
+    if (playerId === 1) database.ref('rooms/' + roomId).update({ p1Move: cameraNumber });
+    else database.ref('rooms/' + roomId).update({ p2Move: cameraNumber });
   }
 }
