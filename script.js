@@ -146,7 +146,7 @@ tossChoices.forEach(button => {
   });
 });
 
-gameNumberButtons.forEach(button => {
+numberButtons.forEach(button => {
   button.addEventListener("click", () => {
     if (isMultiplayer && playerId === 2) return alert("P1 ko toss karne de! Tu wait kar.");
 
